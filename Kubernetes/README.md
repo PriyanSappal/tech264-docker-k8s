@@ -86,26 +86,26 @@ Maintained images are container images provided by trusted sources or organizati
 ```mermaid
 flowchart LR
     %% External Traffic Flow
-    A[External Traffic] -->|Port 31000| B[Application Gateway]
+    A[External Traffic] -->|Port 30001| B[Application Gateway]
     B -->|Redirect to Port 3001| C[App Service]
 
     %% App Deployment and Pods
     subgraph App_Cluster[Application Cluster]
         direction TB
-        C --> D1[App Pod A]
-        C --> D2[App Pod B]
-        C --> D3[App Pod C]
+        C --> D1[App Pod 1]
+        C --> D2[App Pod 2]
+        C --> D3[App Pod 3]
     end
 
-    %% Replica Group
-    subgraph Replica_Group[Replica Group]
+    %% ReplicaSets
+    subgraph Replica_Sets[Replica Set]
         D1 -->|Contains| E1[App Image]
         D2 -->|Contains| E2[App Image]
         D3 -->|Contains| E3[App Image]
     end
 
-    %% Database Cluster
-    subgraph Database_Cluster[Database Cluster]
+    %% Database Deployment
+    subgraph Database_Deployment[Database Deployment]
         direction TB
         F1[DB Pod] --> G[DB Image]
     end
@@ -128,14 +128,30 @@ flowchart LR
     class F1,G blue
     class Database_Cluster blue
 ```
-
-# Deploy App
+## General commands for Kubernetes
+*  `kubectl get all`: this displays all the information (pods, services etc.)
+*  `kubectl get deploy` (you can even specify `replicasets`, `pods`, `service`): this displays just the deploys currently.
+*  `kubectl create -f <file-name>`: this will create/deploy. 
+*  ` kubectl delete pod <pod-name>`: this will delete a specific pod (if you delete one Kubernetes will make another one).
+*  `kubectl edit deploy nginx-deployment`: this will open a notepad editor and allow you to edit. You then save and exit the notepad once you have edited and it will save your changes. (`export KUBE_EDITOR=C:/Windows/notepad.exe` may need this if error message appears).
+*  `kubectl scale --current-replicas=5 --replicas=6 deployment.apps/nginx-deployment`: this will change the number of replicas. 
+*  `kubectl delete -f <file-name>`: this will delete the file (yaml).
+  
+## Deploy App
 1. Create folder `k8s-app-yaml-definitions`
 2. Create two files [app-deploy.yml](../k8s-app-yaml-definitions/app-deploy.yml) and [app-service.yml](../k8s-app-yaml-definitions/app-service.yml)
 3. Run these Kubernetes commands: `kubectl create -f app-deploy.yml` and `kubectl create -f app-service.yml`. 
 4. As we have used `port 30002`. Search `localhost:30002`. 
 
-# Deploy App with DB
-1. 
+## Deploy App with DB
+1. Create folder `k8s-app-db-yaml-definitions`
+2. You can use the same scripts as above. 
+3. You need to add environment variable to the [app-deploy.yml](../k8s-app-db-yaml-definitions/app-deploy.yml). 
+4. Make [db-deploy.yml](../k8s-app-db-yaml-definitions/db-deploy.yml) and [db-service.yml](../k8s-app-db-yaml-definitions/db-service.yml)
+5. Run these Kubernetes commands: `kubectl create -f db-deploy.yml` and `kubectl create -f db-service.yml`, `kubectl create -f app-deploy.yml`, and `kubectl create -f app-service.yml`. 
+
+## Blockers
+* In your `app-service.yml` when connecting with the database you need to change the `NodePort` and it can't be the same port as the `db-service.yml`.
+* Make sure you create the `db-deploy.yml` and `db-service.yml` as the app needs something to connect to. 
 
 

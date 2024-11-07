@@ -22,4 +22,6 @@ spec:
         - containerPort: 3000
         env:
         - name: DB_HOST
-          value: "mongodb://mongo:27017/posts"
+          value: "mongodb://mongo-service.default.svc.cluster.local:27017/posts"
+        command: ["/bin/sh", "-c"]
+        args: [cd .. && node seeds/seed.js && npm start]
