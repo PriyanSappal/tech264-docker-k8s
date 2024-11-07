@@ -1,4 +1,27 @@
 # Kubernetes
+- [Kubernetes](#kubernetes)
+  - [Why is Kubernetes needed](#why-is-kubernetes-needed)
+  - [Benefits of Kubernetes](#benefits-of-kubernetes)
+  - [Success Stories](#success-stories)
+  - [Kubernetes Architecture](#kubernetes-architecture)
+    - [Diagram](#diagram)
+  - [The Cluster Setup](#the-cluster-setup)
+    - [What is a Cluster](#what-is-a-cluster)
+    - [Master vs Worker Nodes](#master-vs-worker-nodes)
+  - [Pros and Cons of Using Managed Service vs Launching Your Own](#pros-and-cons-of-using-managed-service-vs-launching-your-own)
+    - [Managed Service](#managed-service)
+    - [Self-Hosted](#self-hosted)
+  - [Control Plane vs Data Plane](#control-plane-vs-data-plane)
+  - [Kubernetes Objects](#kubernetes-objects)
+  - [What Does it Mean a Pod is "Ephemeral"](#what-does-it-mean-a-pod-is-ephemeral)
+  - [How to Mitigate Security Concerns with Containers](#how-to-mitigate-security-concerns-with-containers)
+  - [Maintained Images](#maintained-images)
+    - [What Are They?](#what-are-they)
+    - [Pros and Cons of Using Maintained Images for Your Base Container Images](#pros-and-cons-of-using-maintained-images-for-your-base-container-images)
+  - [General commands for Kubernetes](#general-commands-for-kubernetes)
+  - [Deploy App](#deploy-app)
+  - [Deploy App with DB](#deploy-app-with-db)
+  - [Blockers](#blockers)
 
 ## Why is Kubernetes needed
 Kubernetes is needed to manage containerised applications at scale. It automates deployment, scaling, and operations of application containers across clusters of hosts, helping developers and system administrators to manage complex microservices architectures.
