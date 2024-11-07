@@ -86,26 +86,26 @@ Maintained images are container images provided by trusted sources or organizati
 ```mermaid
 flowchart LR
     %% External Traffic Flow
-    A[External Traffic] -->|Port 30001| B[Application Gateway]
-    B -->|Redirect to Port 3001| C[App Service]
+    A[External Traffic] -->|Port 30001| B[Redirect]
+    B -->|Port 3001| C[App Service]
 
     %% App Deployment and Pods
-    subgraph App_Cluster[Application Cluster]
+    subgraph App_Deployment[Application ReplicaSet]
         direction TB
         C --> D1[App Pod 1]
         C --> D2[App Pod 2]
         C --> D3[App Pod 3]
     end
 
-    %% ReplicaSets
-    subgraph Replica_Sets[Replica Set]
+    %% Deployment
+    subgraph Deployment[Deployment]
         D1 -->|Contains| E1[App Image]
         D2 -->|Contains| E2[App Image]
         D3 -->|Contains| E3[App Image]
     end
 
-    %% Database Deployment
-    subgraph Database_Deployment[Database Deployment]
+    %% Database ReplicaSets
+    subgraph Database_ReplicaSets[Database ReplicaSets]
         direction TB
         F1[DB Pod] --> G[DB Image]
     end
