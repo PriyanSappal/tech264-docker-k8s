@@ -1,0 +1,22 @@
+# YAML is case sensitive 
+# use spaces not a tab
+apiVersion: apps/v1 # specify api to use for deployment
+kind: Deployment # kind of service/object you want to create
+metadata:
+  name: nginx-deployment # name the deployment
+spec:
+  selector:
+    matchLabels:
+      app: nginx  # look for this label/tab to match the k8 service
+  # create a ReplicaSet with instances/pods
+  replicas: 4
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: priyansappal1/tech264-nginx-auto:v1 # the image you created run mod nginx
+        ports:
+        - containerPort: 80
