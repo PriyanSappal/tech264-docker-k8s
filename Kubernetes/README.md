@@ -213,13 +213,14 @@ flowchart LR
         F1[DB Pod] --> G[DB Image]
     end
 
-     %% Persistent Volume (PV) and Persistent Volume Claim (PVC) for Database
-    subgraph Storage[Persistent Storage]
+     %% Persistent Volume and Persistent Volume Claim
+    subgraph PVC_PV[PVC and PV]
         direction TB
-        H[Persistent Volume (PV)]
-        I[Persistent Volume Claim (PVC)]
-        I -->|Binds| H
+        H[PVC] --> I[PV]
     end
+
+    %% PVC to DB Pod
+    F1 --- H
 
     %% Data Transfer Between App and DB
     D1 --- G
