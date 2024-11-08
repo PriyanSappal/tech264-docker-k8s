@@ -22,6 +22,11 @@
   - [Deploy App](#deploy-app)
   - [Deploy App with DB](#deploy-app-with-db)
   - [Blockers](#blockers)
+- [Diagram with PV and PVC](#diagram-with-pv-and-pvc)
+  - [Task: Create 2-tier deployment with PV for database](#task-create-2-tier-deployment-with-pv-for-database)
+    - [Why Use PV and PVC?](#why-use-pv-and-pvc)
+    - [Steps](#steps)
+- [Kubernetes Autoscaling](#kubernetes-autoscaling)
 
 ## Why is Kubernetes needed
 Kubernetes is needed to manage containerised applications at scale. It automates deployment, scaling, and operations of application containers across clusters of hosts, helping developers and system administrators to manage complex microservices architectures.
@@ -152,13 +157,15 @@ flowchart LR
     class Database_Cluster blue
 ```
 ## General commands for Kubernetes
-*  `kubectl get all`: this displays all the information (pods, services etc.)
-*  `kubectl get deploy` (you can even specify `replicasets`, `pods`, `service`): this displays just the deploys currently.
-*  `kubectl create -f <file-name>`: this will create/deploy. 
-*  ` kubectl delete pod <pod-name>`: this will delete a specific pod (if you delete one Kubernetes will make another one).
-*  `kubectl edit deploy nginx-deployment`: this will open a notepad editor and allow you to edit. You then save and exit the notepad once you have edited and it will save your changes. (`export KUBE_EDITOR=C:/Windows/notepad.exe` may need this if error message appears).
-*  `kubectl scale --current-replicas=5 --replicas=6 deployment.apps/nginx-deployment`: this will change the number of replicas. 
-*  `kubectl delete -f <file-name>`: this will delete the file (yaml).
+* `kubectl get all`: this displays all the information (pods, services etc.)
+* `kubectl get deploy` (you can even specify `replicasets`, `pods`, `service`): this displays just the deploys currently.
+* `kubectl create -f <file-name>`: this will create/deploy. 
+* ` kubectl delete pod <pod-name>`: this will delete a specific pod (if you delete one Kubernetes will make another one).
+* `kubectl edit deploy nginx-deployment`: this will open a notepad editor and allow you to edit. You then save and exit the notepad once you have edited and it will save your changes. (`export KUBE_EDITOR=C:/Windows/notepad.exe` may need this if error message appears).
+* `kubectl apply -f <file-name>`: if changes are made to a file, you can apply them using this command. 
+* `kubectl scale --current-replicas=5 --replicas=6 deployment.apps/nginx-deployment`: this will change the number of replicas. 
+* `kubectl delete -f <file-name>`: this will delete the file (yaml).
+* `winpty kubectl exec -it <pod-name> -- sh`: to SSH into the pod and access the terminal to run commands. 
   
 ## Deploy App
 1. Create folder `k8s-app-yaml-definitions`
@@ -177,4 +184,189 @@ flowchart LR
 * In your `app-service.yml` when connecting with the database you need to change the `NodePort` and it can't be the same port as the `db-service.yml`.
 * Make sure you create the `db-deploy.yml` and `db-service.yml` as the app needs something to connect to. 
 
+# Diagram with PV and PVC
+
+```mermaid 
+flowchart LR
+    %% External Traffic Flow
+    A[External Traffic] -->|Port 30001| B[Redirect]
+    B -->|Port 3001| C[App Service]
+
+    %% App Deployment and Pods
+    subgraph App_Deployment[Application ReplicaSet]
+        direction TB
+        C --> D1[App Pod 1]
+        C --> D2[App Pod 2]
+        C --> D3[App Pod 3]
+    end
+
+    %% Deployment
+    subgraph Deployment[Deployment]
+        D1 -->|Contains| E1[App Image]
+        D2 -->|Contains| E2[App Image]
+        D3 -->|Contains| E3[App Image]
+    end
+
+    %% Database ReplicaSets
+    subgraph Database_ReplicaSets[Database ReplicaSets]
+        direction TB
+        F1[DB Pod] --> G[DB Image]
+    end
+
+    %% Persistent Volume and PVC for Database
+    subgraph Storage[Persistent Storage]
+        direction TB
+        H[Persistent Volume (PV)]
+        I[Persistent Volume Claim (PVC)] -->|Binds| H
+    end
+
+    %% Data Transfer Between App and DB
+    D1 --- G
+    D2 --- G
+    D3 --- G
+
+    %% Database Pod Accessing PVC
+    F1 -->|Attaches to| I
+
+    %% Labels and Styling
+    classDef purple fill:#D1C4E9,stroke:#6A1B9A,stroke-width:2px;
+    classDef yellow fill:#FFEB3B,stroke:#FBC02D,stroke-width:2px;
+    classDef blue fill:#B3E5FC,stroke:#0288D1,stroke-width:2px;
+    classDef green fill:#C8E6C9,stroke:#388E3C,stroke-width:2px;
+    
+    class A purple
+    class B,C yellow
+    class App_Cluster yellow
+    class D1,D2,D3 yellow
+    class Replica_Group yellow
+    class F1,G blue
+    class Database_Cluster blue
+    class H,I green
+```
+## Task: Create 2-tier deployment with PV for database
+
+### Why Use PV and PVC?
+* **Data Persistence**: Ensures that essential data, such as database entries, is not lost when pods are restarted or rescheduled, which is crucial for stateful applications.
+* **Decoupling**: PVCs allow applications to request storage independently of the underlying storage infrastructure, making the deployment portable and adaptable.
+* **Scalability**: Storage can be scaled and managed separately, enabling better resource allocation and usage in a dynamic Kubernetes environment.
+
+### Steps
+1. Create a **Persistent Volume (PV)** [PV yaml script](../k8s-pv-pvc/mongo-pv.yml):
+Define a **PersistentVolume (PV)** resource to allocate storage in the cluster. The PV is the actual physical storage, which can be on local disks, NFS, or cloud storage (e.g., AWS EBS, GCP Persistent Disks).
+
+    **Why**: Provides a storage resource that remains available even if pods are deleted or recreated.
+2. Create a **Persistent Volume Claim (PVC)** [PVC yaml script](../k8s-pv-pvc/mongo-pvc.yml): Define a **PersistentVolumeClaim (PVC)** that requests storage of a specific size and access mode.
+The PVC dynamically binds to an available PV that matches the claim requirements.
+    
+    **Why**: Ensures applications can request storage without knowing the details of the underlying storage resource. This keeps the app configuration flexible and portable.
+
+    ![alt text](../images/image-5.png)
+
+3. Attach **PVC** to the MongoDB Pod [DB deploy yaml script formatted for PV and PVC](../k8s-pv-pvc/db-deploy.yml):
+In the MongoDB Deployment YAML, define a volume that references the PVC and mount it within the MongoDB container at `/data/db`.
+    
+    **Why**: Allows the MongoDB database to store data on persistent storage, which remains available even if the pod is restarted or rescheduled.
+4. Verify Persistent Data:
+     1. You need to remove the commands to automate the seeding of the DB in the [App deploy script without the commands](../k8s-pv-pvc/app-deploy.yml).
+     2. Manually seed the DB by using the `winpty kubectl exec -it pod/sparta-app-deployment-ccdd85f8d-hjzfj -- sh` and seed the database (`node seeds/seed.js`). The records that show up on the `/posts` page should stay the same. 
+   ![alt text](<../images/Screenshot 2024-11-08 123621.png>)
+     3. Delete the `db-deploy.yml` or you could delete the pod. 
+     4. Recreate it. 
+     5. The same `/posts` page should come up.
+   
+    **Why**: Verifies the persistence of data, confirming that the PV and PVC are functioning correctly and providing durability.
+
+# Kubernetes Autoscaling 
+* Kubernetes (K8s) provides multiple autoscaling mechanisms to manage workloads efficiently. 
+* Autoscaling enables Kubernetes clusters to dynamically adjust resources to meet demand, optimize performance, and reduce costs. 
+* Here are the main types of autoscaling available in Kubernetes:
+1. **Horizontal Pod Autoscaler (HPA)**
+* Description: The Horizontal Pod Autoscaler automatically scales the number of pod replicas in a Deployment, ReplicaSet, or StatefulSet based on CPU or memory utilization or custom metrics.
+* Key Features:
+    * Metric-Based Scaling: HPA uses built-in metrics like CPU and memory or external metrics through custom metric providers.
+    * Dynamic Scaling: Adjusts the number of pod replicas dynamically based on workload demands.
+    * Use Cases: Ideal for stateless applications like web servers, APIs, and microservices that require scaling up and down based on traffic or workload.
+    * How it Works: HPA periodically checks specified metrics (e.g., CPU).
+    If the metric value surpasses the threshold, HPA increases pod replicas; if it drops below, HPA reduces replicas.
+    HPA is configured through the kubectl autoscale command or YAML specifications.
+* Configuration Example:
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: example-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: example-deployment
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50
+```
+2. **Vertical Pod Autoscaler (VPA)**
+* Description: The Vertical Pod Autoscaler automatically adjusts the CPU and memory requests/limits of containers within a pod based on actual usage. VPA is useful for optimizing resource utilization without modifying the number of pod replicas.
+
+* Key Features:
+    * Resource Optimization: Ensures pods have the right amount of resources to prevent over-provisioning or under-provisioning.
+    * Automatic Resource Adjustment: Updates pod resource requests and limits based on observed usage patterns.
+    * Use Cases: Suitable for applications with varying resource requirements or for long-running workloads where efficient use of resources is critical.
+    * How it Works: VPA monitors the resource usage of pods and provides recommendations. Based on these recommendations, VPA can adjust resource requests and  limits. Pods may need to be restarted for resource changes to take effect.
+* Configuration Example:
+```yaml
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: example-vpa
+spec:
+  targetRef:
+    apiVersion: "apps/v1"
+    kind:       Deployment
+    name:       example-deployment
+  updatePolicy:
+    updateMode: "Auto"
+```
+3. Cluster Autoscaler (CA)
+* Description: The Cluster Autoscaler dynamically adjusts the number of nodes in a cluster based on the overall resource requirements. It is typically used with cloud providers like AWS, GCP, and Azure that support auto-scaling node groups.
+
+* Key Features:
+    * Node Scaling: Adds nodes when there are pending pods that cannot be scheduled due to insufficient resources.
+    * Resource Optimization: Removes underutilized nodes if they are no longer needed, reducing costs.
+    * Use Cases: Ideal for environments where workload demand varies widely, ensuring nodes scale based on the cluster's overall resource needs.
+    * How it Works: Cluster Autoscaler checks if there are unschedulable pods due to resource constraints. If additional resources are needed, it adds more nodes to the cluster. When resources are no longer needed, CA may scale down the cluster by removing underutilized nodes.
+* Configuration: Cluster Autoscaler is typically configured at the cloud provider level with specific parameters for min/max node counts, node types, and scaling policies.
+
+4. Custom Autoscaling with KEDA (Kubernetes Event-Driven Autoscaling)
+* Description:
+KEDA is an external Kubernetes component that provides event-driven autoscaling based on various types of custom metrics or external event sources, such as message queues, databases, or HTTP requests.
+* Key Features:
+    * Event-Driven: Scales workloads based on external events (e.g., messages in a queue, database load).
+    * Custom Metrics Support: Allows autoscaling based on a wide range of custom metrics beyond CPU and memory.
+    * Use Cases: Suitable for applications with bursty traffic patterns or for use cases requiring integration with external systems (e.g., Azure Event Hubs, AWS SQS).
+    * How it Works: KEDA monitors specified event sources and metrics. When a scaling event is triggered, it automatically adjusts the number of replicas. KEDA works in conjunction with HPA, using external metrics to trigger scaling.
+Configuration Example:
+
+```yaml
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: example-scaledobject
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: example-deployment
+  triggers:
+    - type: rabbitmq
+      metadata:
+        queueName: my-queue
+        host: "amqp://guest:guest@rabbitmq"
+        queueLength: "5"
+```
 
