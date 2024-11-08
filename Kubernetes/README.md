@@ -245,6 +245,30 @@ flowchart LR
     class Database_Cluster blue
     class H,I green
 ```
+
+1. Traffic Flow:
+* External Traffic (purple box) enters through Port 30001 and is redirected to Port 3001.
+* It then reaches the App Service (yellow box), which handles incoming requests to the application.
+2. Application ReplicaSet:
+* The App Service distributes incoming requests to three App Pods (1, 2, and 3), providing redundancy and load distribution.
+* Each App Pod contains an App Image, ensuring each pod runs the same application version.
+3. Deployment:
+* Each App Pod is linked to a specific instance of the App Image (purple boxes), representing the deployed application. 
+* These are the image that are stored on Docker Hub.
+4. Database ReplicaSets
+* The DB Pod (blue box) is the database instance for the application, ensuring data storage and access.
+It contains a DB Image, which represents the database configuration and software.
+5. Persistent Volume and PVC
+* PVC (Persistent Volume Claim) and PV (Persistent Volume) (green boxes) provide persistent storage for the database.
+* The DB Pod attaches to the PVC, which binds to the PV, ensuring database data persists even if the pod restarts.
+
+
+* Color Coding Summary
+    * Purple: External and application images.
+    * Yellow: Application service and pods.
+    * Blue: Database components.
+    * Green: Persistent storage components.
+
 ## Task: Create 2-tier deployment with PV for database
 
 ### Why Use PV and PVC?
@@ -277,7 +301,9 @@ In the MongoDB Deployment YAML, define a volume that references the PVC and moun
      5. The same `/posts` page should come up.
    
     **Why**: Verifies the persistence of data, confirming that the PV and PVC are functioning correctly and providing durability.
-
+*Blockers*:
+1. You can have the PV and PVC in the same file. Makes it easier to create, instead of running each one by one. 
+2. Make sure you indent properly. Standardise. 
 # Kubernetes Autoscaling 
 * Kubernetes (K8s) provides multiple autoscaling mechanisms to manage workloads efficiently. 
 * Autoscaling enables Kubernetes clusters to dynamically adjust resources to meet demand, optimize performance, and reduce costs. 
@@ -312,7 +338,7 @@ spec:
           type: Utilization
           averageUtilization: 50
 ```
-2. **Vertical Pod Autoscaler (VPA)**
+1. **Vertical Pod Autoscaler (VPA)**
 * Description: The Vertical Pod Autoscaler automatically adjusts the CPU and memory requests/limits of containers within a pod based on actual usage. VPA is useful for optimizing resource utilization without modifying the number of pod replicas.
 
 * Key Features:
