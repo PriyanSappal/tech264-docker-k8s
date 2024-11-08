@@ -213,11 +213,12 @@ flowchart LR
         F1[DB Pod] --> G[DB Image]
     end
 
-    %% Persistent Volume and PVC for Database
+     %% Persistent Volume and PVC for Database
     subgraph Storage[Persistent Storage]
         direction TB
         H[Persistent Volume (PV)]
-        I[Persistent Volume Claim (PVC)] -->|Binds| H
+        I[Persistent Volume Claim (PVC)]
+        I -->|Binds| H
     end
 
     %% Data Transfer Between App and DB
@@ -350,8 +351,7 @@ KEDA is an external Kubernetes component that provides event-driven autoscaling 
     * Custom Metrics Support: Allows autoscaling based on a wide range of custom metrics beyond CPU and memory.
     * Use Cases: Suitable for applications with bursty traffic patterns or for use cases requiring integration with external systems (e.g., Azure Event Hubs, AWS SQS).
     * How it Works: KEDA monitors specified event sources and metrics. When a scaling event is triggered, it automatically adjusts the number of replicas. KEDA works in conjunction with HPA, using external metrics to trigger scaling.
-Configuration Example:
-
+* Configuration Example:
 ```yaml
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
