@@ -213,7 +213,7 @@ flowchart LR
         F1[DB Pod] --> G[DB Image]
     end
 
-     %% Persistent Volume and PVC for Database
+     %% Persistent Volume (PV) and Persistent Volume Claim (PVC) for Database
     subgraph Storage[Persistent Storage]
         direction TB
         H[Persistent Volume (PV)]
