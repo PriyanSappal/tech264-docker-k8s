@@ -27,6 +27,11 @@
     - [Why Use PV and PVC?](#why-use-pv-and-pvc)
     - [Steps](#steps)
 - [Kubernetes Autoscaling](#kubernetes-autoscaling)
+- [Task: Use HPA to scale the app](#task-use-hpa-to-scale-the-app)
+  - [Step 1: Install Apache Bench - this is to induce stress to CPU.](#step-1-install-apache-bench---this-is-to-induce-stress-to-cpu)
+  - [Step 2: Define HPA for APP](#step-2-define-hpa-for-app)
+  - [Step 3: Create the HPA](#step-3-create-the-hpa)
+  - [Step 4 Load test with Apache Bench (ab)](#step-4-load-test-with-apache-bench-ab)
 
 ## Why is Kubernetes needed
 Kubernetes is needed to manage containerised applications at scale. It automates deployment, scaling, and operations of application containers across clusters of hosts, helping developers and system administrators to manage complex microservices architectures.
@@ -360,7 +365,7 @@ spec:
   updatePolicy:
     updateMode: "Auto"
 ```
-3. Cluster Autoscaler (CA)
+1. **Cluster Autoscaler (CA)**
 * Description: The Cluster Autoscaler dynamically adjusts the number of nodes in a cluster based on the overall resource requirements. It is typically used with cloud providers like AWS, GCP, and Azure that support auto-scaling node groups.
 
 * Key Features:
@@ -370,7 +375,7 @@ spec:
     * How it Works: Cluster Autoscaler checks if there are unschedulable pods due to resource constraints. If additional resources are needed, it adds more nodes to the cluster. When resources are no longer needed, CA may scale down the cluster by removing underutilized nodes.
 * Configuration: Cluster Autoscaler is typically configured at the cloud provider level with specific parameters for min/max node counts, node types, and scaling policies.
 
-4. Custom Autoscaling with KEDA (Kubernetes Event-Driven Autoscaling)
+4. **Custom Autoscaling with KEDA** (Kubernetes Event-Driven Autoscaling)
 * Description:
 KEDA is an external Kubernetes component that provides event-driven autoscaling based on various types of custom metrics or external event sources, such as message queues, databases, or HTTP requests.
 * Key Features:
@@ -397,3 +402,75 @@ spec:
         queueLength: "5"
 ```
 
+# Task: Use HPA to scale the app
+
+## Step 1: Install Apache Bench - this is to induce stress to CPU.
+1) Download the Win64 on https://www.apachelounge.com/download/. This will be a zip file (you need to extract the file).
+2) Move these files to a file called `.apache`. 
+3) Create an alias. `alias ab=~/.apache/bin/ab.exe`
+
+## Step 2: Define HPA for APP
+1) Add this to the end of your `app-deploy.yml` script. This allows Kubernetes to monitor CPU usage and automatically autoscale the number of pods. 
+```yaml
+ resources:
+          requests:
+            cpu: "100m"     # Request 100 millicores (0.1 CPU)
+          limits:
+            cpu: "500m"     # Limit the app to 500 millicores (0.5 CPU)
+```
+2) Apply this: `kubectl apply -f app-deply.yml`. 
+
+## Step 3: Create the HPA
+1) Create a HPA that will scale the number of pods between 2 and 10. 
+[HPA script](../k8s-pv-pvc/hpa.yml)
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: app-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: sparta-app
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50  # Target 50% CPU utilization
+```
+2) Apply this: `kubectl apply -f hpa.yml`
+3) Verify this setup using `kubectl get hpa`
+
+## Step 4 Load test with Apache Bench (ab)
+1) To simulate load on your application and test if the HPA scales the Pods, use Apache Bench (ab): `ab -n 10000 -c 100 http://<Node.js-Service-External-IP>:<port>/`
+   * -n 10000: Total number of requests to send.
+
+   * -c 100: Number of concurrent requests.
+
+2) Nano into `app-service.yml` and change "NodePort" to "LoadBalancer".
+```yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-svc
+  namespace: default
+spec:
+  ports:
+  - nodePort: 30003   # The port on each node where the service is exposed
+    port: 80    # The port that the service listens on.
+    targetPort: 3000    # The port on the pod that the service forwards traffic to.
+  selector:
+    app: sparta-app # Label to match service to deployment
+  type: LoadBalancer # used to be NodePort, changed for external IP for hpa
+```
+3) Apply and update these changes: `kubectl apply -f app-service.yml`
+Check this has refreshed: `kubectl get services`.
+
+4) To simulate load on your application and test if the HPA scales the Pods, use Apache Bench (ab): `ab -n 20000 -c 200 http://localhost:30003/`
+To view if **pods** have been made: `kubectl get pods`. You should see that the number of **pods** should be higher.
