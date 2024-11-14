@@ -1,0 +1,27 @@
+ # Specifies the API version for MetalLB resources
+ apiVersion: metallb.io/v1beta1
+
+ # Defines the kind of resource, in this case, an IPAddressPool
+ kind: IPAddressPool
+
+ # Metadata section containing the name and namespace of the resource
+ metadata:
+   name: first-pool    # Name of the IP address pool
+   namespace: metallb-system   # Namespace where the resource is created
+
+ # Specification of the IP address pool
+ spec:
+   addresses:
+   - 192.168.1.100-192.168.1.200   # Range of IP addresses to be used by MetalLB
+
+---
+ # # Specifies the API version for MetalLB resources
+ apiVersion: metallb.io/v1beta1
+
+ # Defines the kind of resource, in this case, an L2Advertisement
+ kind: L2Advertisement
+
+ # Metadata section containing the name and namespace of the resource
+ metadata:
+   name: l2-advertisement    # Name of the L2 advertisement
+   namespace: metallb-system   # Namespace where the resource is created

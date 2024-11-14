@@ -32,6 +32,37 @@
   - [Step 2: Define HPA for APP](#step-2-define-hpa-for-app)
   - [Step 3: Create the HPA](#step-3-create-the-hpa)
   - [Step 4 Load test with Apache Bench (ab)](#step-4-load-test-with-apache-bench-ab)
+  - [Install Metrics Server and fix it](#install-metrics-server-and-fix-it)
+- [Use MetalLB as a load balancer for the Sparta app deployment](#use-metallb-as-a-load-balancer-for-the-sparta-app-deployment)
+  - [Goal](#goal)
+  - [MetalLB Requirements](#metallb-requirements)
+- [Install MetalLB by Manifest](#install-metallb-by-manifest)
+    - [What This Command Does:](#what-this-command-does)
+  - [Configure MetalLB in L2 mode](#configure-metallb-in-l2-mode)
+    - [Finding Your IP Range](#finding-your-ip-range)
+    - [Calculating the IP Range](#calculating-the-ip-range)
+  - [Configure MetalLB \& Apply](#configure-metallb--apply)
+    - [Explanation](#explanation)
+  - [Apply your PV and PVC file](#apply-your-pv-and-pvc-file)
+  - [Deploy the Database](#deploy-the-database)
+  - [Deply Sparta App](#deply-sparta-app)
+  - [Enable Autoscaling (HPA)](#enable-autoscaling-hpa)
+  - [Verify the Deployment](#verify-the-deployment)
+  - [Access Service](#access-service)
+- [Delete \& Create](#delete--create)
+    - [Delete all at once:](#delete-all-at-once)
+    - [Create all at once](#create-all-at-once)
+    - [Check They're There](#check-theyre-there)
+- [Minikube on AWS](#minikube-on-aws)
+  - [Step 1: Update Packages and Install Prerequisites](#step-1-update-packages-and-install-prerequisites)
+  - [Step 2: Install Docker](#step-2-install-docker)
+  - [Step 3: Install Minikube](#step-3-install-minikube)
+  - [Step 4: Start Minikube with Docker Driver](#step-4-start-minikube-with-docker-driver)
+  - [Step 5: Confirm Minikube and Kubernetes Status](#step-5-confirm-minikube-and-kubernetes-status)
+  - [Step 6: Enable Minikube Dashboard (Optional)](#step-6-enable-minikube-dashboard-optional)
+  - [Step 7: Accessing Minikube Remotely (Optional)](#step-7-accessing-minikube-remotely-optional)
+- [3 apps deployed on Minikube](#3-apps-deployed-on-minikube)
+  - [Using terraform](#using-terraform)
 
 ## Why is Kubernetes needed
 Kubernetes is needed to manage containerised applications at scale. It automates deployment, scaling, and operations of application containers across clusters of hosts, helping developers and system administrators to manage complex microservices architectures.
@@ -309,6 +340,7 @@ In the MongoDB Deployment YAML, define a volume that references the PVC and moun
 *Blockers*:
 1. You can have the PV and PVC in the same file. Makes it easier to create, instead of running each one by one. 
 2. Make sure you indent properly. Standardise. 
+
 # Kubernetes Autoscaling 
 * Kubernetes (K8s) provides multiple autoscaling mechanisms to manage workloads efficiently. 
 * Autoscaling enables Kubernetes clusters to dynamically adjust resources to meet demand, optimize performance, and reduce costs. 
@@ -343,7 +375,7 @@ spec:
           type: Utilization
           averageUtilization: 50
 ```
-1. **Vertical Pod Autoscaler (VPA)**
+2. **Vertical Pod Autoscaler (VPA)**
 * Description: The Vertical Pod Autoscaler automatically adjusts the CPU and memory requests/limits of containers within a pod based on actual usage. VPA is useful for optimizing resource utilization without modifying the number of pod replicas.
 
 * Key Features:
@@ -365,7 +397,7 @@ spec:
   updatePolicy:
     updateMode: "Auto"
 ```
-1. **Cluster Autoscaler (CA)**
+3. **Cluster Autoscaler (CA)**
 * Description: The Cluster Autoscaler dynamically adjusts the number of nodes in a cluster based on the overall resource requirements. It is typically used with cloud providers like AWS, GCP, and Azure that support auto-scaling node groups.
 
 * Key Features:
@@ -474,3 +506,405 @@ Check this has refreshed: `kubectl get services`.
 
 4) To simulate load on your application and test if the HPA scales the Pods, use Apache Bench (ab): `ab -n 20000 -c 200 http://localhost:30003/`
 To view if **pods** have been made: `kubectl get pods`. You should see that the number of **pods** should be higher.
+
+## Install Metrics Server and fix it
+1) **Install Metrics Server**
+* This command installs the Metrics Server in your Kubernetes cluster.
+The Metrics Server is responsible for collecting resource usage data (CPU and memory) from the nodes and pods in your cluster.
+`kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml`
+2) **Check Metrics Server Logs.**
+This command retrieves the logs from the Metrics Server deployment in the kube-system namespace.
+It helps you diagnose any issues with the Metrics Server by showing its log output.
+`kubectl logs -n kube-system deployment/metrics-server`
+3) **List Metrics Server Pods.**
+This command lists all the pods in the kube-system namespace that have the label `k8s-app=metrics-server`.
+It helps you verify that the Metrics Server pods are running.
+`kubectl get pods -n kube-system -l k8s-app=metrics-server`
+
+**Steps to Fix the Metrics Server**
+
+4) **Check Metrics Server Logs**
+* Review the logs for the Metrics Server to identify any errors:
+`kubectl -n kube-system logs deployment/metrics-server`
+
+5) **Patch the Metrics Server Deployment**
+* Since the logs previously indicated a TLS certificate validation error, let's ensure the Metrics Server is configured to bypass this validation.
+* You can patch the deployment to add the --kubelet-insecure-tls argument:
+```bash
+kubectl patch deployment metrics-server -n kube-system --type='json' -p='[
+  {
+    "op": "add",
+    "path": "/spec/template/spec/containers/0/args/-",
+    "value": "--kubelet-insecure-tls"
+  }
+]'
+```
+6) **Verify the Metrics Server Deployment**
+After patching, check the status of the Metrics Server deployment again:
+`kubectl get deployment -n kube-system metrics-server`
+7) **Check Metrics Availability**
+Once the Metrics Server is running, verify that metrics are available:
+`kubectl top nodes`
+`kubectl top pods`
+8) **Monitor HPA**
+After ensuring the Metrics Server is running and metrics are available, monitor the HPA to see if it starts reporting CPU metrics correctly:
+`kubectl get hpa`
+
+# Use MetalLB as a load balancer for the Sparta app deployment
+Task:
+MetalLB is a load-balancer implementation for bare-metal Kubernetes clusters, which can be used in a local setup.
+
+* Aim: Create a working local deployment of the Sparta test app with database which uses MetalLB as the load balancer.
+* Try to use the latest version of MetalLB
+
+Include:
+* PV and PVC for the database
+* Autoscaling (HPA) for the app
+
+Documentation to help: https://metallb.universe.tf/
+
+> Warning! Be careful of just using ChatGPT to help you, as it will likely give you outdated steps.
+
+Advice:
+  * Keep it simple and use L2 mode and advertising rather BGP
+* Part of your document should include:
+  * Difference between the NodePort and LoadBalancer service, especially the purpose of ports specified in the YAML definition file
+  * How to clean-up your deployment, and uninstall Metal LB
+
+<br>
+
+## Goal
+* Deploy the Sparta test application along with a database on a local Kubernetes cluster, utilising MetalLB in Layer 2 (L2) mode as a LoadBalancer. 
+* This setup will provide:
+  * a public IP address for external access to the Sparta app.
+  * create Persistent Volume (PV) and Persistent Volume Claim (PVC) for the database.
+  * configure Horizontal Pod Autoscaling (HPA) for the Sparta app to manage traffic fluctuations.
+
+<br>
+
+## MetalLB Requirements
+MetalLB requires the following to function:
+* A **Kubernetes cluster**, running Kubernetes 1.13.0 or later, that does not already have network load-balancing functionality.
+* A **cluster network** configuration that can **coexist with MetalLB**.
+* Some **IPv4 addresses** for MetalLB to hand out.
+* When using the L2 operating mode, **traffic on port 7946** (TCP & UDP, other port can be configured) **must be allowed between nodes**, as required by memberlist.
+
+<br>
+
+# Install MetalLB by Manifest
+* MetalLB allows Kubernetes to expose services with a LoadBalancer IP for clusters without native cloud integration. 
+* In this setup, we'll use Layer 2 (L2) mode, where MetalLB announces IP addresses directly to the local network.
+* Make sure Docker Besktop is running Kubernetes.
+
+* Open a gitbash window and `docker login` to cover your back.
+* In a gitbash window, install MetalLB.
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.8/config/manifests/metallb-native.yaml
+```
+
+
+* Apply the manifest:
+  * `kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.8/config/manifests/metallb-native.yaml`
+
+
+
+### What This Command Does:
+Fetches the Manifest:
+* The command downloads the MetalLB manifest file from the specified URL.
+
+Applies the Manifest:
+* The command applies the manifest to your Kubernetes cluster, creating the necessary resources for MetalLB to function. 
+* This includes deploying the MetalLB controller and speaker components.
+
+<br>
+
+## Configure MetalLB in L2 mode
+* Create a configuration file within your 'local-nginx-deploy' folder called 'metallb-config.yml', with an IP range suitable for your local network. 
+
+### Finding Your IP Range
+On Windows
+* Open Command Prompt: Press the Windows key, type cmd, and hit Enter. You will need **Run as Administrator**
+* Run the ipconfig Command: Type `ipconfig` and press Enter. 
+* Look for the "Default Gateway" under your network connection. 
+  * This is your router's IP address.
+
+
+
+From the ipconfig output, we can see the following details for your WiFi connection:
+
+* **IPv4 Address**: 192.168.1.114
+* **Subnet Mask**: 255.255.255.0
+* **Default Gateway**: 192.168.1.254
+
+### Calculating the IP Range
+* Given the subnet mask: 255.255.255.0,
+* Your IP range is within the 192.168.1.x range. 
+* Specifically, the usable IP addresses range from 192.168.1.1-192.168.1.254.
+
+<br>
+
+## Configure MetalLB & Apply
+* You can choose a subset of this range for MetalLB.
+* The usable IP addresses range from 192.168.1.1-192.168.1.254.
+
+```yaml
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: my-ip-pool
+  namespace: metallb-system
+spec:
+  addresses:
+  - 192.168.1.1-192.168.1.254
+```
+
+* Apply the [metallb-config.yml](../k8s-metallb-yaml-definitions/metallb-config.yml)
+  * `kubectl apply -f metallb-config.yml`
+
+
+<br>
+
+### Explanation
+IPAddressPool:
+* **apiVersion**: Specifies the API version for MetalLB resources.
+* **kind**: Defines the type of resource, which is IPAddressPool in this case.
+* **metadata**: Contains metadata about the resource, including its name (first-pool) and namespace (metallb-system).
+* **spec**: Specifies the details of the IP address pool, including the range of IP addresses (192.168.1.1-192.168.1.254) that MetalLB can use.
+
+L2Advertisement:
+* **apiVersion**: Specifies the API version for MetalLB resources.
+* **kind**: Defines the type of resource, which is L2Advertisement in this case.
+* **metadata**: Contains metadata about the resource, including its name (l2-advertisement) and namespace (metallb-system).
+
+> The IPAddressPool resource defines a pool of IP addresses that MetalLB can use to assign to services. The L2Advertisement resource configures MetalLB to announce these IP addresses using Layer 2 (L2) mode, making them accessible on the local network.
+
+<br> 
+
+## Apply your PV and PVC file
+
+```yaml
+kubectl apply -f db-pv.yml
+kubectl apply -f db-pvc.yml
+```
+
+<br>
+
+## Deploy the Database
+
+```yaml
+kubectl create -f db-deploy.yml
+kubectl create -f db-service.yml
+```
+
+## Deply Sparta App
+
+```yaml
+kubectl create -f app-deploy.yml
+kubectl create -f app-service.yml
+```
+
+## Enable Autoscaling (HPA)
+
+```yaml
+kubectl apply -f hpa.yml
+```
+
+<br>
+
+## Verify the Deployment
+* The output should show an EXTERNAL-IP assigned to sparta-app. 
+* You can access the app via this IP.
+
+```yaml
+kubectl get services
+```
+
+![alt text](./kube-images/f.png)
+
+<br>
+
+## Access Service
+* You can now see your app with 'localhost' in the search bar. 
+
+<br>
+
+
+# Delete & Create
+- You will need to change the file names.
+### Delete all at once:
+```bash
+kubectl delete service mongodb-svc && \
+kubectl delete service sparta-app-svc && \
+kubectl delete deployment mongodb-deployment && \
+kubectl delete deployment sparta-app-deployment && \
+kubectl delete pvc mongodb-pvc && \
+kubectl delete pv mongodb-pv && \
+kubectl delete -f hpa.yml && \
+kubectl delete -f metallb-config.yml
+```
+
+### Create all at once
+* `kubectl apply -f metallb-config.yml`
+* `kubectl apply -f app-lb-service.yml`
+* `kubectl apply -f mongodb-pv.yml`
+* `kubectl apply -f mongodb-pvc.yml`
+* `kubectl create -f mongodb-deploy.yml`
+* `kubectl create -f mongodb-service.yml`
+* `kubectl create -f nodejs-deploy.yml`
+* `kubectl create -f nodejs-service.yml`
+* `kubectl apply -f hpa.yml`
+
+```bash
+kubectl apply -f metallb-config.yml && kubectl apply -f mongodb-pv.yml && kubectl apply -f mongodb-pvc.yml && kubectl create -f mongodb-deploy.yml && kubectl create -f mongodb-service.yml && kubectl create -f nodejs-deploy.yml && kubectl create -f nodejs-service.yml && kubectl apply -f hpa.yml
+```
+
+### Check They're There
+* `kubectl get all`
+* `kubectl get pv`
+* `kubectl get pvc`
+* `kubectl get services`
+
+<br>
+
+# Minikube on AWS 
+
+This guide will walk you through the steps to install and set up Minikube on a cloud instance running Ubuntu 22.04 LTS.
+
+## Step 1: Update Packages and Install Prerequisites
+
+Log in to your cloud instance, then update the package list and install required dependencies:
+
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y apt-transport-https ca-certificates curl
+```
+
+## Step 2: Install Docker
+
+Minikube can use Docker as its container runtime, so let’s install Docker.
+
+1. Add Docker’s official GPG key:
+   ```bash
+   curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+   ```
+
+2. Set up the Docker stable repository:
+   ```bash
+   echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+   ```
+
+3. Install Docker:
+   ```bash
+   sudo apt update
+   sudo apt install -y docker-ce docker-ce-cli containerd.io
+   ```
+
+4. Start and enable Docker:
+   ```bash
+   sudo systemctl enable docker --now
+   ```
+
+5. Add your user to the `docker` group to allow running Docker without `sudo`:
+   ```bash
+   sudo usermod -aG docker $USER
+   newgrp docker
+   ```
+
+## Step 3: Install Minikube
+
+1. Download the latest Minikube binary:
+   ```bash
+   curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+   ```
+
+2. Install Minikube:
+   ```bash
+   sudo install minikube-linux-amd64 /usr/local/bin/minikube
+   ```
+
+3. Verify the installation:
+   ```bash
+   minikube version
+   ```
+
+## Step 4: Start Minikube with Docker Driver
+
+Start Minikube using Docker as the driver:
+
+```bash
+minikube start --driver=docker
+```
+
+Minikube will download necessary images and start a local Kubernetes cluster.
+
+## Step 5: Confirm Minikube and Kubernetes Status
+
+Verify that Minikube is running:
+
+```bash
+minikube status
+```
+
+You can also check the status of Kubernetes nodes:
+
+```bash
+kubectl get nodes
+```
+
+## Step 6: Enable Minikube Dashboard (Optional)
+
+Minikube includes a web-based dashboard for managing Kubernetes resources. To launch it:
+
+```bash
+minikube dashboard
+```
+
+## Step 7: Accessing Minikube Remotely (Optional)
+
+To access Minikube services remotely from your local machine, you can use Minikube's tunnel feature:
+
+```bash
+minikube tunnel
+```
+
+This setup gives you a Minikube environment on your cloud instance running Ubuntu 22.04 LTS. Make sure to keep your instance's firewall and security configurations in mind if you plan to expose services publicly.
+
+---
+
+# 3 apps deployed on Minikube
+```bash
+# Add Docker's official GPG key:
+sudo apt-get update -y
+sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
+ 
+# Install docker
+sudo apt-get install ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+ 
+# Add the repository to Apt sources:
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+ 
+sudo apt-get update
+ 
+sudo DEBIAN_FRONTEND=noninteractive apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
+ 
+# Install minikube
+curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+sudo install minikube-linux-amd64 /usr/local/bin/minikube && rm minikube-linux-amd64
+ 
+sudo usermod -aG docker $USER && newgrp docker
+ 
+minikube config set driver docker
+ 
+minikube start
+ 
+minikube status
+```
+
+## Using terraform 

@@ -297,7 +297,7 @@ Your image is now hosted on Docker Hub and can be pulled and run by anyone using
 ## Prerequisites
 * Need a file 
 * Dockerfile:
-```
+```yaml
 # Step 1: Specify the base image
 FROM node:20-alpine3.20
 
@@ -308,7 +308,7 @@ LABEL maintainer="priyansappal@mail.com"
 WORKDIR /usr/src/app
 
 # Step 4: Copy the app folder from the host to the working directory in the container
-COPY app /usr/src/
+COPY app /usr/src/app
 
 # Step 5: Copy the package.json and package-lock.json files
 COPY package*.json ./
@@ -330,7 +330,7 @@ Navigate to your project directory and run:
 ```bash
 docker build -t yourusername/sparta-app:v1 .
 ```
-- **-t**: Tags the image. Replace `yourusername` with your Docker Hub username, and `20` is the version tag.
+- **-t**: Tags the image. Replace `yourusername` with your Docker Hub username, and `v1` is the version tag.
 - **.**: Specifies the current directory as the build context.
 
 ---
